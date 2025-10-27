@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Fraud Detection</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+  </head>
+  <body>
+    <div class="card" role="main" aria-labelledby="title">
+      <h1 style="text-align: center">💳Simple Fraud Detection App</h1>
+      <p class="subtitle" style="text-align: center">
+        Instant transaction risk analysis
+      </p>
+
+      <form id="fraudForm" method="POST" action="/predict">
+        <div>
+          <label for="amount">Transaction Amount</label>
+          <input
+            id="amount"
+            name="amount"
+            type="number"
+            step="0.01"
+            placeholder="e.g. 1250.50"
+            required
+          />
+        </div>
+
+        <div class="row" style="margin-top: 4px">
+          <div class="label small">Auto Location</div>
+          <label class="switch" title="Toggle auto location">
+            <input type="checkbox" id="autoLocation" />
+            <span class="slider" aria-hidden="true"></span>
+          </label>
+        </div>
+        <div>
+          <label for="location">Location</label>
+          <input
+            id="location"
+            name="location"
+            type="text"
+            placeholder="e.g. India"
+            autocomplete="off"
+          />
+          <div class="small">
+            You can toggle <strong>Auto Location</strong> to fill by GPS
+            (browser).
+          </div>
+        </div>
+
+        <div>
+          <label for="device">Device</label>
+          <input
+            id="device"
+            name="device"
+            type="text"
+            placeholder="e.g. Mobile / Web / Unknown"
+            required
+          />
+        </div>
+
+        <div class="row" style="margin-top: 4px">
+          <div class="label small">Auto Time</div>
+          <label class="switch" title="Toggle auto time">
+            <input type="checkbox" id="autoTime" />
+            <span class="slider" aria-hidden="true"></span>
+          </label>
+        </div>
+        <div>
+          <label for="time">Transaction Time</label>
+          <input id="time" name="time" type="time" required />
+          <div class="small">
+            Toggle <strong>Auto Time</strong> to use device clock.
+          </div>
+        </div>
+
+        <button class="primary" type="submit">Calculate Risk</button>
+      </form>
+
+      {% if fraud_risk %}
+      <div class="result" role="status" aria-live="polite">
+        <div>
+          <span class="small">Fraud Risk:</span>
+          <span class="risk {{ fraud_risk|lower }}">{{ fraud_risk }}</span>
+        </div>
+        <div class="small" style="margin-top: 6px">
+          Risk score: <strong>{{ risk_score }}</strong>
+        </div>
+        {% if reasons %}
+        <div class="small reasons">
+          <div style="margin-bottom: 6px"><strong>Reasons:</strong></div>
+          <ul>
+            {% for reason in reasons %}
+            <li>{{ reason }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <script>
+      /* Auto Time toggle */
+      const autoTime = document.getElementById("autoTime");
+      const timeInput = document.getElementById("time");
+      autoTime.addEventListener("change", () => {
+        if (autoTime.checked) {
+          const now = new Date();
+          const hh = String(now.getHours()).padStart(2, "0");
+          const mm = String(now.getMinutes()).padStart(2, "0");
+          timeInput.value = `${hh}:${mm}`;
+          timeInput.readOnly = true;
+        } else {
+          timeInput.readOnly = false;
+        }
+      });
+
+      /* Auto Location toggle - uses geolocation + reverse geocoding (free) */
+      const autoLocation = document.getElementById("autoLocation");
+      const locationInput = document.getElementById("location");
+
+      autoLocation.addEventListener("change", () => {
+        if (autoLocation.checked) {
+          if (!navigator.geolocation) {
+            locationInput.value = "Geolocation not supported";
+            locationInput.readOnly = true;
+            return;
+          }
+          // ask user for permission, then reverse geocode using free service
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const lat = pos.coords.latitude;
+              const lon = pos.coords.longitude;
+              // lightweight free reverse geocode (no key) 
+              fetch(`https://geocode.maps.co/reverse?lat=${lat}&lon=${lon}`)
+                .then((r) => r.json())
+                .then((data) => {
+                  locationInput.value =
+                    (data.address &&
+                      (data.address.country ||
+                        data.address.state ||
+                        data.address.city)) ||
+                    data.display_name ||
+                    "Unknown";
+                  locationInput.readOnly = true;
+                })
+                .catch((err) => {
+                  console.warn("reverse geocode failed", err);
+                  locationInput.value = "Unable to fetch location";
+                  locationInput.readOnly = true;
+                });
+            },
+            (err) => {
+              console.warn("geo denied", err);
+              locationInput.value = "Location access denied";
+              locationInput.readOnly = true;
+            },
+            { enableHighAccuracy: false, timeout: 8000 }
+          );
+        } else {
+          locationInput.readOnly = false;
+          locationInput.value = "";
+        }
+      });
+
+      locationInput.addEventListener("focus", () => {
+        if (autoLocation.checked) {
+          autoLocation.checked = false;
+          locationInput.readOnly = false;
+          locationInput.value = "";
+        }
+      });
+      timeInput.addEventListener("focus", () => {
+        if (autoTime.checked) {
+          autoTime.checked = false;
+          timeInput.readOnly = false;
+          timeInput.value = "";
+        }
+      });
+
+      const form = document.getElementById("fraudForm");
+      form.addEventListener("submit", (e) => {
+        // if autoLocation is checked but location field hasn't been populated yet, block submit briefly
+        if (
+          autoLocation.checked &&
+          (!locationInput.value ||
+            locationInput.value.includes("Unable") ||
+            locationInput.value.includes("denied") ||
+            locationInput.value.includes("not supported"))
+        ) {
+        }
+      });
+    </script>
+  </body>
+</html>
